@@ -11,7 +11,7 @@
 [functions]
   node_bundler = "esbuild"
   external_node_modules = ["@prisma/client", "bcryptjs"]
-  included_files = ["node_modules/.prisma/**"]
+  included_files = ["node_modules/.prisma/client/**"]
 
 # Route all /api/* requests to the Express Netlify Function on the same origin
 [[redirects]]
