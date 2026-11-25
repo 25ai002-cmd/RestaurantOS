@@ -1,25 +1,26 @@
-# Netlify Configuration for RestaurantOS Frontend (apps/web)
-# Deploy apps/web as a static SPA on Netlify, pointing VITE_API_BASE_URL
-# to your hosted Node.js/Express backend (e.g. Railway / Render / Fly.io).
+# Netlify Configuration for RestaurantOS (Frontend + Serverless API Functions)
 
 [build]
-  base = "apps/web"
-  command = "npm run build"
-  publish = "dist"
+  command = "npm run db:generate && npm run build"
+  publish = "apps/web/dist"
+  functions = "netlify/functions"
 
 [build.environment]
   NODE_VERSION = "22"
 
-# Optional API proxy: if you set VITE_API_BASE_URL=/api in Netlify env vars,
-# uncomment and replace <BACKEND_ORIGIN> with your Railway/Render backend URL
-# so cookies/requests share the same origin without CORS issues.
-# [[redirects]]
-#   from = "/api/*"
-#   to = "https://<BACKEND_ORIGIN>/api/:splat"
-#   status = 200
-#   force = true
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["@prisma/client", "prisma", "bcryptjs"]
+  included_files = ["node_modules/.prisma/**", "apps/api/prisma/**"]
 
-# SPA Fallback for React Router (supports /r/:slug, /dashboard, /admin, etc.)
+# Route all /api/* requests to the Express Netlify Function on the same origin
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+# SPA Fallback for React Router (/login, /register, /dashboard, /admin, /r/:slug, /q/:qrToken)
 [[redirects]]
   from = "/*"
   to = "/index.html"

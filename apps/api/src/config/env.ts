@@ -4,8 +4,15 @@ import path from 'node:path';
 import { z } from 'zod';
 
 const localEnv = path.resolve(process.cwd(), '.env');
+const rootEnvLocal = path.resolve(process.cwd(), '.env.local');
+const monorepoRootEnvLocal = path.resolve(process.cwd(), '../../.env.local');
 const monorepoApiEnv = path.resolve(process.cwd(), 'apps/api/.env');
-dotenv.config({ path: fs.existsSync(localEnv) ? localEnv : monorepoApiEnv });
+
+for (const candidate of [rootEnvLocal, monorepoRootEnvLocal, localEnv, monorepoApiEnv]) {
+  if (fs.existsSync(candidate)) {
+    dotenv.config({ path: candidate });
+  }
+}
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
