@@ -1,0 +1,40 @@
+# Netlify Configuration for RestaurantOS Frontend (apps/web)
+# Deploy apps/web as a static SPA on Netlify, pointing VITE_API_BASE_URL
+# to your hosted Node.js/Express backend (e.g. Railway / Render / Fly.io).
+
+[build]
+  base = "apps/web"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Optional API proxy: if you set VITE_API_BASE_URL=/api in Netlify env vars,
+# uncomment and replace <BACKEND_ORIGIN> with your Railway/Render backend URL
+# so cookies/requests share the same origin without CORS issues.
+# [[redirects]]
+#   from = "/api/*"
+#   to = "https://<BACKEND_ORIGIN>/api/:splat"
+#   status = 200
+#   force = true
+
+# SPA Fallback for React Router (supports /r/:slug, /dashboard, /admin, etc.)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Security Headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
