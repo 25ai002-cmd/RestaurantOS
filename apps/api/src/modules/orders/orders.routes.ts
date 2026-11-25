@@ -129,6 +129,12 @@ ordersRouter.post('/', authenticateCustomer, async (req: Request, res: Response,
   }
 });
 
+const CANCEL_WINDOW_MS = 5 * 60 * 1000;
+
+export function isWithinCancelWindow(createdAt: Date, now = new Date()): boolean {
+  return now.getTime() - createdAt.getTime() <= CANCEL_WINDOW_MS;
+}
+
 /**
  * Customer: view personal order history in this restaurant
  */
@@ -143,6 +149,61 @@ ordersRouter.get('/my', authenticateCustomer, async (req: Request, res: Response
       }),
     );
     res.json({ success: true, data: { orders } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Customer: cancel own order within 5 minutes of placement
+ */
+ordersRouter.post('/:id/cancel', authenticateCustomer, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { restaurantId, customerId } = req.customerAuth!;
+    const id = req.params.id as string;
+
+    const cancelled = await withTenantScope(restaurantId, async (tx) => {
+      const order = await tx.order.findFirst({
+        where: { id, restaurantId, customerId },
+      });
+      if (!order) throw new NotFoundError('Order not found');
+
+      if (!canTransitionOrder(order.status, 'CANCELLED')) {
+        throw new ValidationError(`Order cannot be cancelled when status is ${order.status}`);
+      }
+
+      if (!isWithinCancelWindow(order.createdAt)) {
+        throw new ValidationError('Cancellation window expired (orders cannot be cancelled after 5 minutes)');
+      }
+
+      const nextOrder = await tx.order.update({
+        where: { id },
+        data: { status: 'CANCELLED' },
+        include: { items: true },
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          restaurantId,
+          orderId: id,
+          fromStatus: order.status,
+          toStatus: 'CANCELLED',
+          changedById: customerId,
+          actorType: 'CUSTOMER',
+          reason: 'Cancelled by customer within 5-minute window',
+        },
+      });
+
+      return nextOrder;
+    });
+
+    emitTenantEvent(restaurantId, 'order:updated', { orderId: cancelled.id, status: 'CANCELLED' });
+    emitSessionEvent(cancelled.tableSessionId, 'order:updated', {
+      orderId: cancelled.id,
+      status: 'CANCELLED',
+    });
+
+    res.json({ success: true, data: { order: cancelled } });
   } catch (err) {
     next(err);
   }

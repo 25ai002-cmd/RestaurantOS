@@ -51,6 +51,7 @@ interface CustomerOrder {
   orderNumber: string;
   status: string;
   totalInr: number;
+  createdAt: string;
   items: { id: string; productNameSnap: string; quantity: number }[];
 }
 
@@ -83,6 +84,12 @@ export const StorefrontPage: React.FC = () => {
   const [comment, setComment] = useState('');
   const [feedbackSent, setFeedbackSent] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const contextQuery = useQuery({
     queryKey: ['storefront-context', slug, qrToken],
@@ -168,11 +175,17 @@ export const StorefrontPage: React.FC = () => {
   const handleRequestOtp = async () => {
     if (!branding) return;
     setStatusMsg(null);
+    const cleanedPhone = phone.replace(/[\s-]/g, '');
+    if (!/^\+?[0-9]{10,15}$/.test(cleanedPhone)) {
+      setStatusMsg('Please enter a valid 10-digit mobile number.');
+      return;
+    }
     try {
       const data = await customerFetch<{ devOtpPreview?: string }>('/api/v1/customer/auth/request-otp', {
         method: 'POST',
-        body: JSON.stringify({ restaurantSlug: branding.slug, phone }),
+        body: JSON.stringify({ restaurantSlug: branding.slug, phone: cleanedPhone }),
       });
+      setPhone(cleanedPhone);
       setOtpSent(true);
       setDevOtp(data.devOtpPreview || null);
     } catch (err) {
@@ -258,6 +271,18 @@ export const StorefrontPage: React.FC = () => {
       setStatusMsg(`Order ${data.order.orderNumber} sent to kitchen!`);
     } catch (err) {
       setStatusMsg(err instanceof ApiError ? err.message : 'Order failed');
+    }
+  };
+
+  const handleCancelOrder = async (orderId: string) => {
+    try {
+      const data = await customerFetch<{ order: CustomerOrder }>(`/api/v1/orders/${orderId}/cancel`, {
+        method: 'POST',
+      });
+      setMyOrders((prev) => prev.map((o) => (o.id === orderId ? data.order : o)));
+      setStatusMsg(`Order ${data.order.orderNumber} cancelled.`);
+    } catch (err) {
+      setStatusMsg(err instanceof ApiError ? err.message : 'Could not cancel order');
     }
   };
 
@@ -510,17 +535,47 @@ export const StorefrontPage: React.FC = () => {
           <Card className="p-5 space-y-3">
             <h2 className="text-sm font-semibold text-slate-900">Your Orders (Live)</h2>
             <div className="divide-y divide-slate-100 space-y-2">
-              {myOrders.map((o) => (
-                <div key={o.id} className="pt-2 flex items-center justify-between text-xs">
-                  <div>
-                    <div className="font-medium text-slate-900">{o.orderNumber}</div>
-                    <div className="text-slate-500">
-                      {o.items.map((i) => `${i.quantity}x ${i.productNameSnap}`).join(', ')}
+              {myOrders.map((o) => {
+                const elapsedMs = nowMs - new Date(o.createdAt).getTime();
+                const remainingMs = Math.max(0, 5 * 60 * 1000 - elapsedMs);
+                const canCancel =
+                  ['PLACED', 'ACCEPTED', 'PREPARING'].includes(o.status) && remainingMs > 0;
+                const mins = Math.floor(remainingMs / 60000);
+                const secs = Math.floor((remainingMs % 60000) / 1000);
+
+                return (
+                  <div key={o.id} className="pt-2.5 flex items-center justify-between gap-3 text-xs">
+                    <div>
+                      <div className="font-medium text-slate-900">{o.orderNumber}</div>
+                      <div className="text-slate-500">
+                        {o.items.map((i) => `${i.quantity}x ${i.productNameSnap}`).join(', ')}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {canCancel && (
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => handleCancelOrder(o.id)}
+                        >
+                          Cancel ({mins}:{secs.toString().padStart(2, '0')})
+                        </Button>
+                      )}
+                      <Badge
+                        tone={
+                          o.status === 'SERVED'
+                            ? 'success'
+                            : o.status === 'CANCELLED'
+                              ? 'danger'
+                              : 'warning'
+                        }
+                      >
+                        {o.status}
+                      </Badge>
                     </div>
                   </div>
-                  <Badge tone={o.status === 'SERVED' ? 'success' : 'warning'}>{o.status}</Badge>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
         )}
@@ -592,6 +647,22 @@ export const StorefrontPage: React.FC = () => {
           </Card>
         )}
       </main>
+
+      {cart && cart.items.length > 0 && (
+        <div className="fixed bottom-0 inset-x-0 border-t border-slate-200 bg-white/95 backdrop-blur px-4 py-3 shadow-lg">
+          <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
+            <div>
+              <div className="text-xs text-slate-500">
+                {cart.items.reduce((s, i) => s + i.quantity, 0)} item(s) in cart
+              </div>
+              <div className="text-sm font-bold text-slate-900">
+                ₹{(cart.totalInr / 100).toFixed(2)}
+              </div>
+            </div>
+            <Button onClick={handlePlaceOrder}>Place Order Now</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
