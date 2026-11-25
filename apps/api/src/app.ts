@@ -41,7 +41,11 @@ export function createApp() {
     cors({
       origin: (origin, callback) => {
         // Allow non-browser / same-origin requests and configured origins (including Netlify)
-        if (!origin || env.corsOriginsList.includes(origin)) {
+        if (
+          !origin ||
+          env.corsOriginsList.includes(origin) ||
+          (env.NODE_ENV === 'development' && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin))
+        ) {
           callback(null, true);
           return;
         }

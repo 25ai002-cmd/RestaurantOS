@@ -216,3 +216,75 @@ menuRouter.patch(
     }
   },
 );
+
+const bulkImportSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        categoryName: z.string().trim().min(1).max(120),
+        name: z.string().trim().min(1).max(150),
+        description: z.string().trim().max(2000).optional(),
+        basePriceInr: z.coerce.number().int().min(0),
+        dietaryType: z.enum(['VEG', 'NON_VEG', 'EGGETARIAN', 'VEGAN']).default('VEG'),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+
+menuRouter.post(
+  '/bulk-import',
+  requirePermission('menu:write'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const restaurantId = req.tenant!.restaurantId;
+      const { items } = bulkImportSchema.parse(req.body);
+
+      const createdCount = await withTenantScope(restaurantId, async (tx) => {
+        const existingCats = await tx.category.findMany({ where: { restaurantId } });
+        const catMap = new Map(existingCats.map((c) => [c.name.toLowerCase(), c.id]));
+
+        const existingProds = await tx.product.findMany({
+          where: { restaurantId },
+          select: { name: true, categoryId: true },
+        });
+        const prodSet = new Set(existingProds.map((p) => `${p.categoryId}:${p.name.toLowerCase()}`));
+
+        let count = 0;
+        for (const item of items) {
+          const catKey = item.categoryName.toLowerCase();
+          let categoryId = catMap.get(catKey);
+          if (!categoryId) {
+            const newCat = await tx.category.create({
+              data: { restaurantId, name: item.categoryName },
+            });
+            categoryId = newCat.id;
+            catMap.set(catKey, categoryId);
+          }
+
+          const prodKey = `${categoryId}:${item.name.toLowerCase()}`;
+          if (!prodSet.has(prodKey)) {
+            await tx.product.create({
+              data: {
+                restaurantId,
+                categoryId,
+                name: item.name,
+                description: item.description,
+                basePriceInr: item.basePriceInr,
+                dietaryType: item.dietaryType,
+                isAvailable: true,
+              },
+            });
+            prodSet.add(prodKey);
+            count++;
+          }
+        }
+        return count;
+      });
+
+      res.status(201).json({ success: true, data: { createdCount } });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
