@@ -306,13 +306,23 @@ export const StorefrontPage: React.FC = () => {
   }
 
   const categories = menuQuery.data?.categories || [];
-  const filteredCategories = categories
-    .filter((c) => catFilter === 'ALL' || c.id === catFilter)
+  const hasVeg = categories.some((c) => c.products.some((p) => p.dietaryType === 'VEG'));
+  const hasNonVeg = categories.some((c) => c.products.some((p) => p.dietaryType === 'NON_VEG'));
+  const showDietFilter = hasVeg && hasNonVeg;
+  const effectiveDietFilter = showDietFilter ? dietFilter : 'ALL';
+
+  const nonEmptyCategories = categories
     .map((c) => ({
       ...c,
-      products: c.products.filter((p) => dietFilter === 'ALL' || p.dietaryType === dietFilter),
+      products: c.products.filter(
+        (p) => effectiveDietFilter === 'ALL' || p.dietaryType === effectiveDietFilter,
+      ),
     }))
     .filter((c) => c.products.length > 0);
+
+  const filteredCategories = nonEmptyCategories.filter(
+    (c) => catFilter === 'ALL' || c.id === catFilter,
+  );
 
   const hasPaidBill = myBills.some((b) => b.status === 'PAID');
 
@@ -375,49 +385,56 @@ export const StorefrontPage: React.FC = () => {
           </Card>
         )}
 
-        {/* Dietary & Category Filter Bar */}
-        {categories.length > 0 && (
+        {/* Dietary & Category Filter Bar (only show filters that have items) */}
+        {(showDietFilter || nonEmptyCategories.length > 1) && (
           <div className="space-y-2">
-            <div className="flex gap-1.5">
-              {(['ALL', 'VEG', 'NON_VEG'] as const).map((d) => (
+            {showDietFilter && (
+              <div className="flex gap-1.5">
+                {(['ALL', 'VEG', 'NON_VEG'] as const).map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => {
+                      setDietFilter(d);
+                      setCatFilter('ALL');
+                    }}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                      dietFilter === d
+                        ? d === 'VEG'
+                          ? 'bg-emerald-600 text-white'
+                          : d === 'NON_VEG'
+                            ? 'bg-red-600 text-white'
+                            : 'bg-slate-900 text-white'
+                        : 'border border-slate-200 bg-white text-slate-600'
+                    }`}
+                  >
+                    {d === 'ALL' ? 'All' : d === 'VEG' ? 'Veg' : 'Non-Veg'}
+                  </button>
+                ))}
+              </div>
+            )}
+            {nonEmptyCategories.length > 1 && (
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
                 <button
-                  key={d}
-                  onClick={() => setDietFilter(d)}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                    dietFilter === d
-                      ? d === 'VEG'
-                        ? 'bg-emerald-600 text-white'
-                        : d === 'NON_VEG'
-                          ? 'bg-red-600 text-white'
-                          : 'bg-slate-900 text-white'
-                      : 'border border-slate-200 bg-white text-slate-600'
-                  }`}
-                >
-                  {d === 'ALL' ? 'All' : d === 'VEG' ? 'Veg' : 'Non-Veg'}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
-              <button
-                onClick={() => setCatFilter('ALL')}
-                className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium ${
-                  catFilter === 'ALL' ? 'bg-slate-900 text-white' : 'border bg-white text-slate-600'
-                }`}
-              >
-                All Menu
-              </button>
-              {categories.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setCatFilter(c.id)}
+                  onClick={() => setCatFilter('ALL')}
                   className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium ${
-                    catFilter === c.id ? 'bg-slate-900 text-white' : 'border bg-white text-slate-600'
+                    catFilter === 'ALL' ? 'bg-slate-900 text-white' : 'border bg-white text-slate-600'
                   }`}
                 >
-                  {c.name}
+                  All Menu
                 </button>
-              ))}
-            </div>
+                {nonEmptyCategories.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setCatFilter(c.id)}
+                    className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium ${
+                      catFilter === c.id ? 'bg-slate-900 text-white' : 'border bg-white text-slate-600'
+                    }`}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
