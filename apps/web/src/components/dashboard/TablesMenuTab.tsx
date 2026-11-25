@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Plus, RefreshCw, CheckSquare } from 'lucide-react';
+import { ExternalLink, Plus, RefreshCw, CheckSquare, Download } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { apiFetch } from '../../lib/api';
 import { PRESET_DISHES } from '../../data/presetDishes';
 import { Card, CardHeader } from '../ui/Card';
@@ -135,37 +136,66 @@ export const TablesTab: React.FC = () => {
                 <th className="px-5 py-3 font-medium">Table</th>
                 <th className="px-5 py-3 font-medium">Branch</th>
                 <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3 font-medium">Customer QR Link</th>
+                <th className="px-5 py-3 font-medium">Scannable QR Code</th>
                 <th className="px-5 py-3 font-medium">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {tablesQuery.data?.tables.map((t) => (
-                <tr key={t.id}>
-                  <td className="px-5 py-3 font-medium text-slate-900">
-                    {t.tableNumber} ({t.capacity} seats)
-                  </td>
-                  <td className="px-5 py-3 text-slate-700">{t.branch.name}</td>
-                  <td className="px-5 py-3">
-                    <Badge tone={t.status === 'AVAILABLE' ? 'success' : 'warning'}>{t.status}</Badge>
-                  </td>
-                  <td className="px-5 py-3">
-                    <Link
-                      to={`/q/${t.qrToken}`}
-                      target="_blank"
-                      className="inline-flex items-center gap-1 text-slate-900 underline"
-                    >
-                      Open QR Menu <ExternalLink className="h-3 w-3" />
-                    </Link>
-                  </td>
-                  <td className="px-5 py-3">
-                    <Button size="sm" variant="secondary" onClick={() => rotateQr.mutate(t.id)}>
-                      <RefreshCw className="h-3 w-3" />
-                      Rotate QR
-                    </Button>
-                  </td>
-                </tr>
-              ))}
+              {tablesQuery.data?.tables.map((t) => {
+                const qrUrl = `${window.location.origin}/q/${t.qrToken}`;
+                return (
+                  <tr key={t.id}>
+                    <td className="px-5 py-3 font-medium text-slate-900">
+                      {t.tableNumber} ({t.capacity} seats)
+                    </td>
+                    <td className="px-5 py-3 text-slate-700">{t.branch.name}</td>
+                    <td className="px-5 py-3">
+                      <Badge tone={t.status === 'AVAILABLE' ? 'success' : 'warning'}>{t.status}</Badge>
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-lg border border-slate-200 bg-white p-1.5" id={`qr-wrap-${t.id}`}>
+                          <QRCodeSVG value={qrUrl} size={72} level="M" />
+                        </div>
+                        <div className="space-y-1">
+                          <Link
+                            to={`/q/${t.qrToken}`}
+                            target="_blank"
+                            className="inline-flex items-center gap-1 font-medium text-slate-900 underline"
+                          >
+                            Open QR Menu <ExternalLink className="h-3 w-3" />
+                          </Link>
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const svg = document.querySelector(`#qr-wrap-${t.id} svg`);
+                                if (!svg) return;
+                                const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `table-${t.tableNumber}-qr.svg`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] text-slate-600 hover:text-slate-900"
+                            >
+                              <Download className="h-3 w-3" /> Download SVG
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <Button size="sm" variant="secondary" onClick={() => rotateQr.mutate(t.id)}>
+                        <RefreshCw className="h-3 w-3" />
+                        Rotate QR
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
